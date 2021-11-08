@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"k8s.io/client-go/kubernetes"
 	v1 "k8s.io/client-go/kubernetes/typed/apps/v1"
+	v12 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/clientcmd"
 	"os"
 	"path/filepath"
@@ -38,4 +39,8 @@ func NewKubernetesApi() (*KubernetesApi, error) {
 
 func (k *KubernetesApi) AppsV1() v1.AppsV1Interface {
 	return k.clientSet.AppsV1()
+}
+
+func (k *KubernetesApi) CoreV1() v12.CoreV1Interface {
+	return k.clientSet.CoreV1()
 }

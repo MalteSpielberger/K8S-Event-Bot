@@ -2,3 +2,5 @@
 cmd/test
 
 config.json
+
+plugin/plugin.exe

@@ -1,5 +1,5 @@
 package listener
 
 type Listener interface {
-	Listen() error
+	Listen(done <-chan bool) error
 }

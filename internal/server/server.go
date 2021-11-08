@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"github.com/mattermost/mattermost-server/v5/model"
 	"k8s-event-bot/internal/configuration"
-	"k8s-event-bot/internal/errorsctx"
+	"k8s-event-bot/internal/eventctx"
 	"k8s-event-bot/internal/k8s"
 	"k8s-event-bot/internal/listener"
 	"k8s-event-bot/internal/mattermost"
+	"k8s-event-bot/internal/reportstorage"
+	"time"
 )
 
 type Server struct {
@@ -33,7 +35,7 @@ func (s *Server) getMattermostHandler() (*mattermost.MattermostHandler, error) {
 			return nil, fmt.Errorf("cannot get bot user: %w", err)
 		}
 
-		s.mattermostHandler = mattermost.NewMattermostHandler(s.config.BotWantedUsername, user, s.getMattermostClient(), s.config.MaintainerUsernames, "")
+		s.mattermostHandler = mattermost.NewMattermostHandler(s.config.BotWantedUsername, user, s.getMattermostClient(), s.config.MaintainerUsernames, s.config.DevOpsChannel, s.config.TeamID, reportstorage.NewInMemoryReportStorage())
 	}
 
 	return s.mattermostHandler, nil
@@ -91,7 +93,7 @@ func (s *Server) getListeners() ([]listener.Listener, error) {
 			return nil, fmt.Errorf("cannot get kubernetes api: %w", err)
 		}
 
-		s.listeners = append(s.listeners, errorsctx.NewErrorsListener(handler, k8sApi))
+		s.listeners = append(s.listeners, eventctx.NewEventListener(handler, k8sApi, s.config.WarnOnEventReasons, s.config.WarnOnReachCount))
 	}
 
 	return s.listeners, nil
@@ -113,11 +115,16 @@ func (s *Server) Start() error {
 		return fmt.Errorf("cannot get listeners: %w", err)
 	}
 
+	done := make(chan bool)
+
 	for i, l := range listeners {
-		if err := l.Listen(); err != nil {
+		if err := l.Listen(done); err != nil {
 			return fmt.Errorf("cannot start l %v: %w", i, err)
 		}
 	}
+
+	//TODO: Check how to not exit programm
+	time.Sleep(1 * time.Minute)
 
 	return nil
 }

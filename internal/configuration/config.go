@@ -15,6 +15,10 @@ type Configuration struct {
 	BotPassword         string   `json:"bot_password"`
 	BotWantedUsername   string   `json:"bot_wanted_username"`
 	MaintainerUsernames []string `json:"maintainer_usernames"`
+	DevOpsChannel       string   `json:"dev_ops_channel"`
+	TeamID              string   `json:"team_id"`
+	WarnOnEventReasons  []string `json:"warn_on_event_reasons"`
+	WarnOnReachCount    int      `json:"warn_on_reach_count"`
 }
 
 // NewConfiguration is used, to create a new configuration
