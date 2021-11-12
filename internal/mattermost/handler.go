@@ -1,7 +1,9 @@
 package mattermost
 
 import (
+	"errors"
 	"fmt"
+	uuid2 "github.com/golangee/uuid"
 	"github.com/mattermost/mattermost-server/v5/model"
 	"k8s.io/apimachinery/pkg/types"
 	"k8sbot/internal/i18n"
@@ -49,75 +51,117 @@ func (m *MattermostHandler) setupUser(username string) error {
 	return nil
 }
 
-func (m *MattermostHandler) IsObjectReported(id types.UID) (bool, error) {
-	return m.reportStorage.WasReportedEarlier(id)
-}
+func (m *MattermostHandler) SendReport(objectID types.UID, namespaces, reason, resource, message, lastTimeStampStr string, count int32) error {
+	var new *reportstorage.Report
 
-func (m *MattermostHandler) AddReportToPost(objectId types.UID) error {
-	log.Println("add to report!")
+	old, err := m.reportStorage.ReadByObjectID(objectID)
 
-	postId, err := m.reportStorage.GetPostId(objectId)
+	if errors.Is(err, &reportstorage.NoReportErr{}) {
+		new = &reportstorage.Report{
+			ID:               uuid2.New(),
+			ReportedObject:   objectID,
+			Namespace:        namespaces,
+			Reason:           reason,
+			Resource:         resource,
+			Msg:              message,
+			Count:            count,
+			ReportTimes:      1,
+			LastTimestampStr: lastTimeStampStr,
+			IsInProgress:     false,
+		}
 
-	if err != nil {
-		return fmt.Errorf("cannot get postId from storage: %w", err)
+		team, resp := m.client.GetTeamByName(m.teamId, "")
+
+		if resp.Error != nil {
+			return fmt.Errorf("cannot get team by given name: %w", resp.Error)
+		}
+
+		channel, resp := m.client.GetChannelByName(m.devOpsChannelName, team.Id, "")
+
+		if resp.Error != nil {
+			return fmt.Errorf("cannot get channel: %w", err)
+		}
+
+		post := &model.Post{}
+		post.ChannelId = channel.Id
+
+		attachment := []*model.SlackAttachment{{
+			Title: m.res.Warning(),
+			Text:  m.res.UnexpectedEvent(),
+			Fields: []*model.SlackAttachmentField{
+				{
+					Title: m.res.Namespace(),
+					Value: namespaces,
+					Short: true,
+				},
+				{
+					Title: m.res.Reason(),
+					Value: reason,
+					Short: true,
+				},
+				{
+					Title: m.res.Object(),
+					Value: resource,
+					Short: true,
+				},
+				{
+					Title: m.res.Message(),
+					Value: message,
+					Short: true,
+				},
+				{
+					Title: m.res.Count(),
+					Value: count,
+					Short: true,
+				},
+				{
+					Title: m.res.LastSeen(),
+					Value: lastTimeStampStr,
+					Short: true,
+				},
+			},
+		}}
+
+		model.ParseSlackAttachment(post, attachment)
+
+		if post, resp := m.client.CreatePost(post); resp.Error != nil {
+			return fmt.Errorf("cannot create post for report: %w", resp.Error)
+		} else {
+			if err := m.reportStorage.SetPostID(new.ID, post.Id); err != nil {
+				return fmt.Errorf("cannot set post id for new report: %w", err)
+			}
+		}
+
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("cannot read object: %w", err)
 	}
 
-	post, resp := m.client.GetPost(postId, "")
+	new = old
+
+	if err := m.reportStorage.IncreaseCounter(new.ID); err != nil {
+		fmt.Errorf("cannot increase counter of report: %w", err)
+	}
+
+	post, resp := m.client.GetPost(old.PostID, "")
 
 	if resp.Error != nil {
-		return fmt.Errorf("cannot get post from client: %w", resp.Error)
+		return fmt.Errorf("cannot get post for report: %w", resp.Error)
 	}
 
 	if len(post.Attachments()) != 1 {
-		return fmt.Errorf("invalid post!")
+		return fmt.Errorf("got invalid post")
 	}
 
-	lastField := post.Attachments()[0].Fields[len(post.Attachments()[0].Fields)-1]
+	attachments := post.Attachments()
 
-	// Check if the lastField is used, to show how often
-	// the report was updated.
-	if lastField.Title != m.res.CountReportFromBot() {
-		attachments := post.Attachments()
+	attachments[0].Fields[len(attachments[0].Fields)-1].Value = new.Count
 
-		attachments[0].Fields = append(attachments[0].Fields, &model.SlackAttachmentField{
-			Title: m.res.CountReportFromBot(),
-			Value: 1,
-			Short: true,
-		})
+	post.AddProp("attachments", attachments)
 
-		post.AddProp("attachments", attachments)
-
-		if _, resp := m.client.UpdatePost(post.Id, post); resp.Error != nil {
-			return fmt.Errorf("cannot updated post: %w", err)
-		}
-	} else {
-		attachments := post.Attachments()
-
-		attachments[0].Fields[len(attachments[0].Fields)-1].Value = attachments[0].Fields[len(attachments[0].Fields)-1].Value.(float64) +1
-
-		post.AddProp("attachments", attachments)
-
-		if _, resp := m.client.UpdatePost(post.Id, post); resp.Error != nil {
-			return fmt.Errorf("cannot updated post: %w", err)
-		}
+	if _, resp := m.client.UpdatePost(post.Id, post); resp.Error != nil {
+		return fmt.Errorf("cannot updated post: %w", err)
 	}
-
-	/*
-		lastField := post.Attachments()[0].Fields[len(post.Attachments()[0].Fields)-1]
-		//Check if the report was updated once
-		if lastField.Title == m.res.CountReportFromBot() {
-			lastField.Value = lastField.Value.(int) + 1
-		} else {
-			post.Attachments()[0].Fields = append(post.Attachments()[0].Fields, &model.SlackAttachmentField{
-				Title: m.res.CountReportFromBot(),
-				Value: 1,
-				Short: true,
-			})
-		}
-		if _, resp := m.client.UpdatePost(post.Id, post); resp.Error != nil {
-			return fmt.Errorf("cannot updated post: %w", resp.Error)
-		}
-	*/
 
 	return nil
 }
@@ -239,86 +283,6 @@ func (m *MattermostHandler) SendPodRestartWarning(pod, namespace string, restart
 
 	if _, resp := m.client.CreatePost(post); resp.Error != nil {
 		return fmt.Errorf("cannot create post: %w", resp.Error)
-	}
-
-	return nil
-}
-
-func (m *MattermostHandler) SendEventWarning(objectId types.UID, namespace, reason, object, message, lastTimeStampStr string, count int32) error {
-	wasReported, err := m.IsObjectReported(objectId)
-
-	if err != nil {
-		return fmt.Errorf("cannot check if object was reported earlier: %w", err)
-	}
-
-	if wasReported {
-		if err := m.AddReportToPost(objectId); err != nil {
-			return fmt.Errorf("cannot add num to post: %w", err)
-		}
-
-		return nil
-	}
-
-	team, resp := m.client.GetTeamByName(m.teamId, "")
-
-	if resp.Error != nil {
-		fmt.Errorf("cannot get team: %w", resp.Error)
-	}
-
-	channel, resp := m.client.GetChannelByName(m.devOpsChannelName, team.Id, "")
-
-	if resp.Error != nil {
-		return fmt.Errorf("cannot get DevOps-channel: %w", resp.Error)
-	}
-
-	post := &model.Post{}
-	post.ChannelId = channel.Id
-
-	attachment := []*model.SlackAttachment{{
-		Title: m.res.Warning(),
-		Text:  m.res.UnexpectedEvent(),
-		Fields: []*model.SlackAttachmentField{
-			{
-				Title: m.res.Namespace(),
-				Value: namespace,
-				Short: true,
-			},
-			{
-				Title: m.res.Reason(),
-				Value: reason,
-				Short: true,
-			},
-			{
-				Title: m.res.Object(),
-				Value: object,
-				Short: true,
-			},
-			{
-				Title: m.res.Message(),
-				Value: message,
-				Short: true,
-			},
-			{
-				Title: m.res.Count(),
-				Value: count,
-				Short: true,
-			},
-			{
-				Title: m.res.LastSeen(),
-				Value: lastTimeStampStr,
-				Short: true,
-			},
-		},
-	}}
-
-	model.ParseSlackAttachment(post, attachment)
-
-	if post, resp := m.client.CreatePost(post); resp.Error != nil {
-		return fmt.Errorf("cannot create post: %w", resp.Error)
-	} else {
-		if err := m.reportStorage.Add(objectId, post.Id); err != nil {
-			return fmt.Errorf("cannot add item to storage: %w", err)
-		}
 	}
 
 	return nil

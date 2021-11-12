@@ -44,8 +44,8 @@ func (e *EventListener) check() error {
 				for _, reason := range e.warnOnEventReasons {
 					if reason == event.Reason {
 						if event.Count >= int32(e.count) {
-							if err := e.mattermost.SendEventWarning(event.ObjectMeta.UID, event.Namespace, event.Reason, event.ObjectMeta.Name, event.Message, event.LastTimestamp.String(), event.Count); err != nil {
-								return fmt.Errorf("cannot send event warning: %w", err)
+							if err := e.mattermost.SendReport(event.ObjectMeta.UID, event.Namespace, event.Reason, event.ObjectMeta.Name, event.Message, event.LastTimestamp.String(), event.Count); err != nil {
+								return fmt.Errorf("cannot send new report: %w", err)
 							}
 						}
 					}

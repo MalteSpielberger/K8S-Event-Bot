@@ -342,6 +342,8 @@ github.com/golangee/i18n v0.0.0-20201214100216-3e76e2ab7ca4 h1:vVEuW8HFUgnT68vkE
 github.com/golangee/i18n v0.0.0-20201214100216-3e76e2ab7ca4/go.mod h1:XB5yUChPoI1lvexK28rc5znxyPj6lJNN2wY7zl6uN68=
 github.com/golangee/log v0.0.0-20201214095632-610ba2dec6e5 h1:UYE411gQQIorUoIvp9BqFIBCxTwnFUa6XBjN0kjwiqY=
 github.com/golangee/log v0.0.0-20201214095632-610ba2dec6e5/go.mod h1:dUiMZFHdnlIsi6KOyAj+5jT+THo32aFtAoFMTRBlwuo=
+github.com/golangee/uuid v0.0.0-20200908112435-4e82cb965bfd h1:5gLVwkMBIp8QkADQHnu4AksYXbsf17b4Qjx3d1z3dt8=
+github.com/golangee/uuid v0.0.0-20200908112435-4e82cb965bfd/go.mod h1:i+BaPFNyXGweWAc/GX3OniM1pz/m1qLja81YgJZOrMQ=
 github.com/gomodule/redigo v1.7.1-0.20190724094224-574c33c3df38/go.mod h1:B4C85qUVwatsJoIUNIfCRsp7qO0iAmpGFZ4EELWSbC4=
 github.com/gomodule/redigo v2.0.0+incompatible/go.mod h1:B4C85qUVwatsJoIUNIfCRsp7qO0iAmpGFZ4EELWSbC4=
 github.com/google/btree v0.0.0-20180813153112-4030bb1f1f0c/go.mod h1:lNA+9X1NB3Zf8V7Ke586lFgjr2dZNuvo3lPJSGZ5JPQ=

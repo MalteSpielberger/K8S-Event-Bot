@@ -4,7 +4,10 @@ go 1.17
 
 require (
 	github.com/golangee/i18n v0.0.0-20201214100216-3e76e2ab7ca4
+	github.com/golangee/uuid v0.0.0-20200908112435-4e82cb965bfd
+	github.com/google/uuid v1.2.0
 	github.com/mattermost/mattermost-server/v5 v5.39.1
+	github.com/xtgo/uuid v0.0.0-20140804021211-a0b114877d4c
 	k8s.io/apimachinery v0.22.3
 	k8s.io/client-go v0.22.3
 )
@@ -23,7 +26,6 @@ require (
 	github.com/golangee/log v0.0.0-20201214095632-610ba2dec6e5 // indirect
 	github.com/google/go-cmp v0.5.6 // indirect
 	github.com/google/gofuzz v1.1.0 // indirect
-	github.com/google/uuid v1.2.0 // indirect
 	github.com/googleapis/gnostic v0.5.5 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect

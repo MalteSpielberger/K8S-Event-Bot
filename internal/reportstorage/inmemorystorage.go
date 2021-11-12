@@ -1,29 +1,87 @@
 package reportstorage
 
-import "k8s.io/apimachinery/pkg/types"
+import (
+	"github.com/golangee/uuid"
+	"k8s.io/apimachinery/pkg/types"
+)
 
 type InMemoryReportStorage struct {
-	reports map[types.UID]string
+	reports []*Report
 }
 
 func NewInMemoryReportStorage() *InMemoryReportStorage {
 	return &InMemoryReportStorage{
-		reports: map[types.UID]string{},
+		reports: []*Report{},
 	}
 }
 
-func (i *InMemoryReportStorage) Add(id types.UID, postId string) error {
-	i.reports[id] = postId
+func (i *InMemoryReportStorage) Write(report *Report) error {
+	i.reports = append(i.reports, report)
 
 	return nil
 }
 
-func (i *InMemoryReportStorage) GetPostId(id types.UID) (string, error) {
-	return i.reports[id], nil
+func (i *InMemoryReportStorage) ReadByReportID(reportID uuid.UUID) (*Report, error) {
+	for _, r := range i.reports {
+		if r.ID == reportID {
+			return r, nil
+		}
+	}
+
+	return nil, &NoReportErr{}
 }
 
-func (i *InMemoryReportStorage) WasReportedEarlier(id types.UID) (bool, error) {
-	_, found := i.reports[id]
+func (i *InMemoryReportStorage) ReadByObjectID(objectID types.UID) (*Report, error) {
+	for _, r := range i.reports {
+		if r.ReportedObject == objectID {
+			return r, nil
+		}
+	}
 
-	return found, nil
+	return nil, &NoReportErr{}
+}
+
+func (i *InMemoryReportStorage) Delete(reportID uuid.UUID) error {
+	tmp := []*Report{}
+
+	for _, r := range i.reports {
+		if r.ID != reportID {
+			tmp = append(tmp, r)
+		}
+	}
+
+	i.reports = tmp
+
+	return nil
+}
+
+
+func (i *InMemoryReportStorage) IncreaseCounter(reportID uuid.UUID) error {
+	for _, r := range i.reports {
+		if r.ID == reportID {
+			r.Count++
+		}
+	}
+
+	return nil
+}
+
+func (i *InMemoryReportStorage) SetInProgress(reportID uuid.UUID, val bool) error {
+	for _, r := range i.reports {
+		if r.ID == reportID {
+			r.IsInProgress = val
+		}
+	}
+
+	return nil
+}
+
+func (i *InMemoryReportStorage) SetPostID(reportID uuid.UUID, postID string) error {
+	for _, r := range i.reports {
+		if r.ID == reportID {
+			r.PostID = postID
+		}
+	}
+
+	return nil
 }
