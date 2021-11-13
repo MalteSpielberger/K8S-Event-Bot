@@ -5,14 +5,17 @@ import (
 	"github.com/mattermost/mattermost-server/v5/model"
 	"k8sbot/internal/configuration"
 	"k8sbot/internal/eventctx"
+	"k8sbot/internal/http"
 	"k8sbot/internal/k8s"
 	"k8sbot/internal/listener"
 	"k8sbot/internal/mattermost"
 	"k8sbot/internal/reportstorage"
+	http2 "net/http"
 )
 
 type Server struct {
 	config            *configuration.Configuration
+	endpoints         *http.ReportEndpoints
 	mattermostHandler *mattermost.MattermostHandler
 	k8sApi            *k8s.KubernetesApi
 	client            *model.Client4
@@ -24,6 +27,20 @@ func NewServer() *Server {
 	return &Server{
 		config: configuration.NewConfiguration(),
 	}
+}
+
+func (s *Server) getReportEndpoints() (*http.ReportEndpoints, error) {
+	if s.endpoints == nil {
+		handler, err := s.getMattermostHandler()
+
+		if err != nil {
+			return nil, err
+		}
+
+		s.endpoints = http.NewReportEndpoints(handler)
+	}
+
+	return s.endpoints, nil
 }
 
 func (s *Server) getMattermostHandler() (*mattermost.MattermostHandler, error) {
@@ -122,6 +139,25 @@ func (s *Server) Start() error {
 		}
 	}
 
-	// Add select to keep the bot alive
-	select {}
+	handler, err := s.getMattermostHandler()
+
+	if err != nil {
+		return err
+	}
+
+	if err := handler.Listen(done); err != nil {
+		return fmt.Errorf("cannot check reports: %w", err)
+	}
+
+	_, err = s.getReportEndpoints()
+
+	if err != nil {
+		return err
+	}
+
+	if err := http2.ListenAndServe(":9090", nil); err != nil {
+		panic(err)
+	}
+
+	return nil
 }

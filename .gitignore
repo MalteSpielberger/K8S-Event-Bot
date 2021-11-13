@@ -3,4 +3,6 @@ cmd/test
 
 config.json
 
-plugin/plugin.exe
+internal/plugin/plugin.exe
+plugin.exe
+plugin.tar.gz

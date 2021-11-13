@@ -15,6 +15,10 @@ func NewInMemoryReportStorage() *InMemoryReportStorage {
 	}
 }
 
+func (i *InMemoryReportStorage) ReadAll() ([]*Report, error) {
+	return i.reports, nil
+}
+
 func (i *InMemoryReportStorage) Write(report *Report) error {
 	i.reports = append(i.reports, report)
 
@@ -59,7 +63,7 @@ func (i *InMemoryReportStorage) Delete(reportID uuid.UUID) error {
 func (i *InMemoryReportStorage) IncreaseCounter(reportID uuid.UUID) error {
 	for _, r := range i.reports {
 		if r.ID == reportID {
-			r.Count++
+			r.ReportTimes++
 		}
 	}
 
@@ -70,6 +74,17 @@ func (i *InMemoryReportStorage) SetInProgress(reportID uuid.UUID, val bool) erro
 	for _, r := range i.reports {
 		if r.ID == reportID {
 			r.IsInProgress = val
+		}
+	}
+
+	return nil
+}
+
+func (i *InMemoryReportStorage) SubmitReport(reportID uuid.UUID, username string) error {
+	for _, r := range i.reports {
+		if r.ID == reportID {
+			r.ReportStopped = true
+			r.ReportStoppedBy = username
 		}
 	}
 

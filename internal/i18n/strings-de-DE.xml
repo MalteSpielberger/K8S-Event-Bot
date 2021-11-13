@@ -16,5 +16,9 @@
 
     <string name="count_report_from_bot">Meldungswiederholungen vom Bot</string>
 
+    <string name="submit">Bestätigen</string>
+    <string name="submitted_at">Bestätigt um</string>
+    <string name="submitted_by">Bestätigt von</string>
+
     <string name="warning_restart_pod">Der angegebene Pod startet aktuell öfters neu!</string>
 </resources>

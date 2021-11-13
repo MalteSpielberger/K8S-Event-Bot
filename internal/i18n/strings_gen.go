@@ -25,6 +25,9 @@ func init() {
 	i18n.ImportValue(i18n.NewText(tag, "pod", "Pod"))
 	i18n.ImportValue(i18n.NewText(tag, "reason", "Grund"))
 	i18n.ImportValue(i18n.NewText(tag, "restarts", "Neustarts"))
+	i18n.ImportValue(i18n.NewText(tag, "submit", "Bestätigen"))
+	i18n.ImportValue(i18n.NewText(tag, "submitted_at", "Bestätigt um"))
+	i18n.ImportValue(i18n.NewText(tag, "submitted_by", "Bestätigt von"))
 	i18n.ImportValue(i18n.NewText(tag, "unexpected_event", ""))
 	i18n.ImportValue(i18n.NewText(tag, "warning", "Warnung"))
 	i18n.ImportValue(i18n.NewText(tag, "warning_restart_pod", "Der angegebene Pod startet aktuell öfters neu!"))
@@ -141,6 +144,33 @@ func (r Resources) Restarts() string {
 	return str
 }
 
+// Submit returns a translated text for "Bestätigen"
+func (r Resources) Submit() string {
+	str, err := r.res.Text("submit")
+	if err != nil {
+		return fmt.Errorf("MISS!submit: %w", err).Error()
+	}
+	return str
+}
+
+// SubmittedAt returns a translated text for "Bestätigt um"
+func (r Resources) SubmittedAt() string {
+	str, err := r.res.Text("submitted_at")
+	if err != nil {
+		return fmt.Errorf("MISS!submitted_at: %w", err).Error()
+	}
+	return str
+}
+
+// SubmittedBy returns a translated text for "Bestätigt von"
+func (r Resources) SubmittedBy() string {
+	str, err := r.res.Text("submitted_by")
+	if err != nil {
+		return fmt.Errorf("MISS!submitted_by: %w", err).Error()
+	}
+	return str
+}
+
 // UnexpectedEvent returns a translated text for ""
 func (r Resources) UnexpectedEvent() string {
 	str, err := r.res.Text("unexpected_event")
@@ -182,6 +212,9 @@ func (r Resources) FuncMap() map[string]interface{} {
 	m["Pod"] = r.Pod
 	m["Reason"] = r.Reason
 	m["Restarts"] = r.Restarts
+	m["Submit"] = r.Submit
+	m["SubmittedAt"] = r.SubmittedAt
+	m["SubmittedBy"] = r.SubmittedBy
 	m["UnexpectedEvent"] = r.UnexpectedEvent
 	m["Warning"] = r.Warning
 	m["WarningRestartPod"] = r.WarningRestartPod

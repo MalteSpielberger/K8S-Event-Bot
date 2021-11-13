@@ -6,6 +6,7 @@ import (
 )
 
 type ReportStorage interface {
+	ReadAll() ([]*Report, error)
 	Write(report *Report) error
 	ReadByReportID(reportID uuid.UUID) (*Report, error)
 	ReadByObjectID(objectID types.UID) (*Report, error)
@@ -13,6 +14,7 @@ type ReportStorage interface {
 
 	IncreaseCounter(reportID uuid.UUID) error
 	SetInProgress(reportID uuid.UUID, val bool) error
+	SubmitReport(reportID uuid.UUID, username string) error
 
 	SetPostID(reportID uuid.UUID, postID string) error
 }

@@ -10,6 +10,7 @@ import (
 	"k8sbot/internal/reportstorage"
 	"log"
 	"path/filepath"
+	"time"
 )
 
 type MattermostHandler struct {
@@ -51,10 +52,83 @@ func (m *MattermostHandler) setupUser(username string) error {
 	return nil
 }
 
+//TODO: REMOVE REPORT WHEN POST WAS DELETED BY CHAT USER
+
+func (m *MattermostHandler) Listen(done <-chan bool) error {
+	ticker := time.NewTicker(5 * time.Second)
+
+	go func() {
+		for {
+			select {
+			case <-done:
+				ticker.Stop()
+				return
+			case _ = <-ticker.C:
+				if err := m.checkReports(); err != nil {
+					m.SendInternalError(err)
+				}
+			}
+		}
+	}()
+	return nil
+}
+
+func (m *MattermostHandler) checkReports() error {
+	reports, err := m.reportStorage.ReadAll()
+
+	if err != nil {
+		return fmt.Errorf("cannot read reports: %w", err)
+	}
+
+	for _, r := range reports {
+		if !r.ReportStopped {
+			//Check if someone deletes the post
+			// When this ist the case, the report will
+			// be removed from the storage.
+			post, resp := m.client.GetPost(r.PostID, "")
+
+			if resp.StatusCode == 404 {
+				//Post was not found
+				if err := m.reportStorage.Delete(r.ID); err != nil {
+					return fmt.Errorf("cannot remove outdated report: %w", err)
+				}
+
+				continue
+			}
+
+			if time.Now().After(r.LastReportUpdate.Add(30 * time.Second)) {
+				if err := m.reportStorage.IncreaseCounter(r.ID); err != nil {
+					return fmt.Errorf("cannot increase counter of report: %w", err)
+				}
+
+				if len(post.Attachments()) != 1 {
+					return fmt.Errorf("got invalid post")
+				}
+
+				attachments := post.Attachments()
+
+				for idx, f := range attachments[0].Fields {
+					if f.Title == m.res.CountReportFromBot() {
+						attachments[0].Fields[idx].Value = r.ReportTimes
+					}
+				}
+
+				post.AddProp("attachments", attachments)
+
+				if _, resp := m.client.UpdatePost(post.Id, post); resp.Error != nil {
+					return fmt.Errorf("cannot update post: %w", resp.Error)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 func (m *MattermostHandler) SendReport(objectID types.UID, namespaces, reason, resource, message, lastTimeStampStr string, count int32) error {
 	var new *reportstorage.Report
 
-	old, err := m.reportStorage.ReadByObjectID(objectID)
+	_, err := m.reportStorage.ReadByObjectID(objectID)
 
 	if errors.Is(err, &reportstorage.NoReportErr{}) {
 		new = &reportstorage.Report{
@@ -66,8 +140,10 @@ func (m *MattermostHandler) SendReport(objectID types.UID, namespaces, reason, r
 			Msg:              message,
 			Count:            count,
 			ReportTimes:      1,
-			LastTimestampStr: lastTimeStampStr,
 			IsInProgress:     false,
+			LastReportUpdate: time.Now(),
+			ReportStopped:    false,
+			ReportStoppedBy:  "",
 		}
 
 		team, resp := m.client.GetTeamByName(m.teamId, "")
@@ -115,9 +191,21 @@ func (m *MattermostHandler) SendReport(objectID types.UID, namespaces, reason, r
 					Short: true,
 				},
 				{
-					Title: m.res.LastSeen(),
-					Value: lastTimeStampStr,
+					Title: m.res.CountReportFromBot(),
+					Value: new.ReportTimes,
 					Short: true,
+				},
+			},
+			Actions: []*model.PostAction{
+				{
+					Type:  "button",
+					Name:  m.res.Submit(),
+					Style: "success",
+					Integration: &model.PostActionIntegration{
+						//URL: fmt.Sprintf("http://localhost:8065/plugin/%s/report/submit?reportID=%v&user=%v", "net.mspielberger.k8s-bot-redirecter", new.ID.String(), "mspielberger"),
+						URL: fmt.Sprintf("http://192.168.178.20:9090/report/submit?reportID=%v&user=%v", new.ID.String(), "test"),
+					},
+					Disabled: false,
 				},
 			},
 		}}
@@ -127,8 +215,9 @@ func (m *MattermostHandler) SendReport(objectID types.UID, namespaces, reason, r
 		if post, resp := m.client.CreatePost(post); resp.Error != nil {
 			return fmt.Errorf("cannot create post for report: %w", resp.Error)
 		} else {
-			if err := m.reportStorage.SetPostID(new.ID, post.Id); err != nil {
-				return fmt.Errorf("cannot set post id for new report: %w", err)
+			new.PostID = post.Id
+			if err := m.reportStorage.Write(new); err != nil {
+				return fmt.Errorf("cannot write report: %w", err)
 			}
 		}
 
@@ -137,13 +226,17 @@ func (m *MattermostHandler) SendReport(objectID types.UID, namespaces, reason, r
 		return fmt.Errorf("cannot read object: %w", err)
 	}
 
-	new = old
+	return nil
+}
 
-	if err := m.reportStorage.IncreaseCounter(new.ID); err != nil {
-		fmt.Errorf("cannot increase counter of report: %w", err)
+func (m *MattermostHandler) SubmitReport(reportID uuid2.UUID, username string) error {
+	report, err := m.reportStorage.ReadByReportID(reportID)
+
+	if err != nil {
+		return fmt.Errorf("cannot read report with given id: %w", err)
 	}
 
-	post, resp := m.client.GetPost(old.PostID, "")
+	post, resp := m.client.GetPost(report.PostID, "")
 
 	if resp.Error != nil {
 		return fmt.Errorf("cannot get post for report: %w", resp.Error)
@@ -155,12 +248,32 @@ func (m *MattermostHandler) SendReport(objectID types.UID, namespaces, reason, r
 
 	attachments := post.Attachments()
 
-	attachments[0].Fields[len(attachments[0].Fields)-1].Value = new.Count
+	if len(attachments[0].Actions) != 1 {
+		return fmt.Errorf("got invalid post")
+	}
 
-	post.AddProp("attachments", attachments)
+	attachments[0].Fields = append(attachments[0].Fields, &model.SlackAttachmentField{
+		Title: m.res.SubmittedAt(),
+		Value: time.Now().Format("15:04:05 02.01.2006"),
+		Short: true,
+	})
+
+	attachments[0].Fields = append(attachments[0].Fields, &model.SlackAttachmentField{
+		Title: m.res.SubmittedBy(),
+		Value: username,
+		Short: true,
+	})
+
+	attachments[0].Actions[0].Disabled = true
+
+	if err := m.reportStorage.SubmitReport(report.ID, username); err != nil {
+		return fmt.Errorf("cannot update report in storage to submit: %w", err)
+	}
+
+	model.ParseSlackAttachment(post, attachments)
 
 	if _, resp := m.client.UpdatePost(post.Id, post); resp.Error != nil {
-		return fmt.Errorf("cannot updated post: %w", err)
+		return fmt.Errorf("cannot update post: %w", resp.Error)
 	}
 
 	return nil
